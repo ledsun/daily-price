@@ -12,7 +12,9 @@ def slugify(name)
   slug = slug.gsub(/[^a-z0-9]+/, "_")
   slug = slug.gsub(/^_+|_+$/, "")
   slug = slug.gsub(/_+/, "_")
-  slug
+  return slug unless slug.empty?
+
+  "product_#{name.encode("UTF-8").unpack1("H*")}"
 end
 
 def load_products
