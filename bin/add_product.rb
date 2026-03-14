@@ -25,6 +25,18 @@ def yodobashi_search_url(name)
   "https://www.yodobashi.com/?word=#{CGI.escape(name)}"
 end
 
+def normalize_amazon_url(url)
+  return url if url.empty?
+
+  uri = URI.parse(url)
+  asin = uri.path.match(%r{/(?:dp|gp/product)/([A-Z0-9]{10})(?:/|$)})&.captures&.first
+  return url unless asin
+
+  "https://www.amazon.co.jp/dp/#{asin}"
+rescue URI::InvalidURIError
+  url
+end
+
 def prompt(message)
   print message
   $stdout.flush
@@ -45,6 +57,7 @@ puts ""
 
 amazon_url = prompt("Amazon の商品ページURL (不要なら空Enter): ")
 yodobashi_url = prompt("ヨドバシの商品ページURL (不要なら空Enter): ")
+amazon_url = normalize_amazon_url(amazon_url)
 
 if amazon_url.empty? && yodobashi_url.empty?
   puts "エラー: Amazon URLとヨドバシURLのどちらか一方は必須です。"
