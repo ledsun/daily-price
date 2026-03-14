@@ -6,7 +6,7 @@ require "json"
 require "net/http"
 require "uri"
 require "time"
-require "gammo"
+require "nokogiri"
 
 PRODUCTS_FILE = File.join(__dir__, "..", "products.yaml")
 PRICES_FILE = File.join(__dir__, "..", "prices.json")
@@ -14,12 +14,40 @@ PRICES_FILE = File.join(__dir__, "..", "prices.json")
 TIMEOUT = 15
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 ACCEPT_LANGUAGE = "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7"
+SEC_FETCH_DEST = "document"
+SEC_FETCH_MODE = "navigate"
+SEC_FETCH_SITE = "none"
+SEC_FETCH_USER = "?1"
+DEBUG_FETCH = ENV["DEBUG_FETCH"] == "1"
+
+def resolve_uri(base_uri, location)
+  uri = URI.parse(location)
+  return uri unless uri.host.nil?
+
+  if location.start_with?("//")
+    return URI.parse("#{base_uri.scheme}:#{location}")
+  end
+
+  if location.start_with?("/")
+    return URI::Generic.build(
+      scheme: base_uri.scheme,
+      host: base_uri.host,
+      port: base_uri.port,
+      path: uri.path,
+      query: uri.query,
+      fragment: uri.fragment,
+    )
+  end
+
+  URI.parse(URI.join(base_uri.to_s, location).to_s)
+end
 
 def fetch_html(url_str)
   uri = URI.parse(url_str)
   redirects = 0
   loop do
     raise "Too many redirects" if redirects > 5
+    raise "Invalid URI host: #{uri}" if uri.host.nil? || uri.host.empty?
 
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = uri.scheme == "https"
@@ -30,6 +58,10 @@ def fetch_html(url_str)
     request["User-Agent"] = USER_AGENT
     request["Accept-Language"] = ACCEPT_LANGUAGE
     request["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    request["Sec-Fetch-Dest"] = SEC_FETCH_DEST
+    request["Sec-Fetch-Mode"] = SEC_FETCH_MODE
+    request["Sec-Fetch-Site"] = SEC_FETCH_SITE
+    request["Sec-Fetch-User"] = SEC_FETCH_USER
 
     response = http.request(request)
 
@@ -37,7 +69,10 @@ def fetch_html(url_str)
     when Net::HTTPSuccess
       return response.body
     when Net::HTTPRedirection
-      uri = URI.parse(response["location"])
+      location = response["location"]
+      raise "Redirect location is missing: #{url_str}" if location.nil? || location.empty?
+
+      uri = resolve_uri(uri, location)
       redirects += 1
     else
       raise "HTTP #{response.code}: #{url_str}"
@@ -75,13 +110,13 @@ YODOBASHI_SELECTORS = [
 
 def fetch_amazon_price(url)
   html = fetch_html(url)
-  doc = Gammo.new(html).parse
+  doc = Nokogiri::HTML5.parse(html)
 
   AMAZON_SELECTORS.each do |selector|
     node = doc.css(selector).first
     next unless node
 
-    price = extract_price(node.inner_text)
+    price = extract_price(node.text)
     return price if price
   end
 
@@ -90,13 +125,13 @@ end
 
 def fetch_yodobashi_price(url)
   html = fetch_html(url)
-  doc = Gammo.new(html).parse
+  doc = Nokogiri::HTML5.parse(html)
 
   YODOBASHI_SELECTORS.each do |selector|
     node = doc.css(selector).first
     next unless node
 
-    price = extract_price(node.inner_text)
+    price = extract_price(node.text)
     return price if price
   end
 
@@ -133,6 +168,7 @@ products.each do |product|
       end
     rescue => e
       puts "  Amazon: エラー - #{e.message} (前回値を保持)"
+      warn e.full_message if DEBUG_FETCH
     end
   end
 
@@ -151,6 +187,7 @@ products.each do |product|
       end
     rescue => e
       puts "  ヨドバシ: エラー - #{e.message} (前回値を保持)"
+      warn e.full_message if DEBUG_FETCH
     end
   end
 
