@@ -20,10 +20,10 @@ jobs:
           bundler-cache: true
 
       - name: Fetch prices
-        run: ruby scripts/fetch_prices.rb
+        run: bundle exec ruby scripts/fetch_prices.rb
 
       - name: Build HTML
-        run: ruby scripts/build_html.rb
+        run: bundle exec ruby scripts/build_html.rb
 
       - name: Commit and push if changed
         run: |
