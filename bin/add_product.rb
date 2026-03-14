@@ -4,18 +4,9 @@
 require "yaml"
 require "uri"
 require "cgi"
+require "securerandom"
 
 PRODUCTS_FILE = File.join(__dir__, "..", "products.yaml")
-
-def slugify(name)
-  slug = name.downcase
-  slug = slug.gsub(/[^a-z0-9]+/, "_")
-  slug = slug.gsub(/^_+|_+$/, "")
-  slug = slug.gsub(/_+/, "_")
-  return slug unless slug.empty?
-
-  "product_#{name.encode("UTF-8").unpack1("H*")}"
-end
 
 def load_products
   data = YAML.load_file(PRODUCTS_FILE)
@@ -61,19 +52,11 @@ if amazon_url.empty? && yodobashi_url.empty?
 end
 
 products = load_products
-id = slugify(name)
 
-if id.empty?
-  puts "エラー: 商品名から有効なIDを生成できませんでした。"
-  exit 1
-end
-
-if products.any? { |p| p["id"] == id }
-  puts "エラー: ID '#{id}' は既に存在します。"
-  exit 1
-end
-
-product = { "id" => id, "name" => name }
+product = {
+  "id" => SecureRandom.uuid,
+  "name" => name,
+}
 product["amazon_url"] = amazon_url unless amazon_url.empty?
 product["yodobashi_url"] = yodobashi_url unless yodobashi_url.empty?
 
@@ -81,4 +64,4 @@ products << product
 save_products(products)
 
 puts ""
-puts "商品を追加しました: #{id}"
+puts "商品を追加しました: #{name}"
