@@ -1,0 +1,17 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    gammo (0.3.0)
+
+PLATFORMS
+  ruby
+  x86_64-linux-gnu
+
+DEPENDENCIES
+  gammo
+
+CHECKSUMS
+  gammo (0.3.0) sha256=466450e1c2bdcee0ec37cc04a31f4b461b738a21d266d88025561c7e713a1003
+
+BUNDLED WITH
+  4.0.8
