@@ -20,6 +20,8 @@ jobs:
           bundler-cache: true
 
       - name: Fetch prices
+        env:
+          DEBUG_FETCH: "1"
         run: bundle exec ruby scripts/fetch_prices.rb
 
       - name: Build HTML
@@ -44,6 +46,14 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: web
+
+      - name: Upload fetch debug artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetch-debug
+          path: tmp/fetch_debug
+          if-no-files-found: ignore
 
   deploy:
     runs-on: ubuntu-latest

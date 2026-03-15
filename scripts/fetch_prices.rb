@@ -10,6 +10,7 @@ require "nokogiri"
 
 PRODUCTS_FILE = File.join(__dir__, "..", "products.yaml")
 PRICES_FILE = File.join(__dir__, "..", "prices.json")
+DEBUG_DIR = File.join(__dir__, "..", "tmp", "fetch_debug")
 
 TIMEOUT = 15
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -19,6 +20,23 @@ SEC_FETCH_MODE = "navigate"
 SEC_FETCH_SITE = "none"
 SEC_FETCH_USER = "?1"
 DEBUG_FETCH = ENV["DEBUG_FETCH"] == "1"
+
+def ensure_debug_dir
+  Dir.mkdir(File.join(__dir__, "..", "tmp")) unless Dir.exist?(File.join(__dir__, "..", "tmp"))
+  Dir.mkdir(DEBUG_DIR) unless Dir.exist?(DEBUG_DIR)
+end
+
+def debug_filename(prefix, product_id, url_str, ext)
+  host = URI.parse(url_str).host.to_s.gsub(/[^a-zA-Z0-9.-]/, "_")
+  timestamp = Time.now.utc.strftime("%Y%m%dT%H%M%SZ")
+  File.join(DEBUG_DIR, "#{timestamp}_#{prefix}_#{product_id}_#{host}.#{ext}")
+end
+
+def write_debug_file(path, content)
+  ensure_debug_dir
+  File.write(path, content)
+  warn "  debug saved: #{path.sub(%r{.*/daily-price/}, '')}" if DEBUG_FETCH
+end
 
 def resolve_uri(base_uri, location)
   uri = URI.parse(location)
@@ -42,7 +60,7 @@ def resolve_uri(base_uri, location)
   URI.parse(URI.join(base_uri.to_s, location).to_s)
 end
 
-def fetch_html(url_str)
+def fetch_html(url_str, product_id:, source:)
   uri = URI.parse(url_str)
   redirects = 0
   loop do
@@ -75,6 +93,20 @@ def fetch_html(url_str)
       uri = resolve_uri(uri, location)
       redirects += 1
     else
+      if DEBUG_FETCH
+        metadata = [
+          "source: #{source}",
+          "product_id: #{product_id}",
+          "url: #{url_str}",
+          "final_uri: #{uri}",
+          "http_status: #{response.code}",
+          "headers:",
+          response.each_header.map { |k, v| "  #{k}: #{v}" },
+        ].flatten.join("\n")
+        body = response.body.to_s
+        write_debug_file(debug_filename(source, product_id, url_str, "txt"), "#{metadata}\n")
+        write_debug_file(debug_filename(source, product_id, url_str, "html"), body[0, 20_000])
+      end
       raise "HTTP #{response.code}: #{url_str}"
     end
   end
@@ -108,8 +140,8 @@ YODOBASHI_SELECTORS = [
   "[class*='selling'] [class*='price']",
 ].freeze
 
-def fetch_amazon_price(url)
-  html = fetch_html(url)
+def fetch_amazon_price(url, product_id:)
+  html = fetch_html(url, product_id: product_id, source: "amazon")
   doc = Nokogiri::HTML5.parse(html)
 
   AMAZON_SELECTORS.each do |selector|
@@ -120,11 +152,16 @@ def fetch_amazon_price(url)
     return price if price
   end
 
+  write_debug_file(
+    debug_filename("amazon_parse", product_id, url, "html"),
+    html[0, 20_000],
+  ) if DEBUG_FETCH
+
   nil
 end
 
-def fetch_yodobashi_price(url)
-  html = fetch_html(url)
+def fetch_yodobashi_price(url, product_id:)
+  html = fetch_html(url, product_id: product_id, source: "yodobashi")
   doc = Nokogiri::HTML5.parse(html)
 
   YODOBASHI_SELECTORS.each do |selector|
@@ -134,6 +171,11 @@ def fetch_yodobashi_price(url)
     price = extract_price(node.text)
     return price if price
   end
+
+  write_debug_file(
+    debug_filename("yodobashi_parse", product_id, url, "html"),
+    html[0, 20_000],
+  ) if DEBUG_FETCH
 
   nil
 end
@@ -156,7 +198,7 @@ products.each do |product|
   amazon_url = product["amazon_url"].to_s
   unless amazon_url.empty?
     begin
-      price = fetch_amazon_price(amazon_url)
+      price = fetch_amazon_price(amazon_url, product_id: id)
       if price
         prices[id]["amazon"] = {
           "price" => price,
@@ -175,7 +217,7 @@ products.each do |product|
   yodobashi_url = product["yodobashi_url"].to_s
   unless yodobashi_url.empty?
     begin
-      price = fetch_yodobashi_price(yodobashi_url)
+      price = fetch_yodobashi_price(yodobashi_url, product_id: id)
       if price
         prices[id]["yodobashi"] = {
           "price" => price,
