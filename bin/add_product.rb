@@ -29,7 +29,7 @@ def normalize_amazon_url(url)
   return url if url.empty?
 
   uri = URI.parse(url)
-  asin = uri.path.match(%r{/(?:dp|gp/product)/([A-Z0-9]{10})(?:/|$)})&.captures&.first
+  asin = uri.path.match(%r{/(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{10})(?:/|$)})&.captures&.first
   return url unless asin
 
   "https://www.amazon.co.jp/dp/#{asin}"
