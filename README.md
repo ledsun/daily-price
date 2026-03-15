@@ -1,7 +1,7 @@
 # daily-price
 Amazon.co.jp とヨドバシドットコムの日用品価格を比較する小さな静的サイトです。
 
-GitHub Pages URL: `https://ledsun.github.io/daily-price/`
+GitHub Pages URL: https://ledsun.github.io/daily-price/
 
 ## 構成
 
